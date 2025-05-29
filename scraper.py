@@ -442,6 +442,18 @@ def main():
                             for k, v in details['metadata'].items():
                                 flat_row[f'meta_{k}'] = v
                         results.append(flat_row)
+                else:
+                    # If details is None, output a row with just the input data and empty fields for the rest
+                    flat_row = {
+                        'address': row['address'],
+                        'city': row['city'],
+                        'state': row['state'],
+                        'zip_code': row['zip_code'],
+                        'Year': '',
+                        'Owner Info': '',
+                        'Assessed': '',
+                    }
+                    results.append(flat_row)
             finally:
                 scraper.close()
             time.sleep(2)
