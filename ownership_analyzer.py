@@ -34,7 +34,7 @@ def analyze_ownership(filename):
             raise ValueError(f"Missing required column: {col}")
 
     # Read the original input file to get Site Names and preserve order
-    input_df = pd.read_csv('test_addresses.csv')
+    input_df = pd.read_csv('addresses.csv')
     site_names = dict(zip(input_df['address'].str.upper(), input_df['Site Name']))
 
     # Group the results by property for fast lookup
