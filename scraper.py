@@ -39,6 +39,7 @@ class GasStationScraper:
             'ST': 'STREET',
             'AVE': 'AVENUE',
             'RD': 'ROAD',
+            'RT': 'ROUTE',
             'DR': 'DRIVE',
             'BLVD': 'BOULEVARD',
             'CT': 'COURT',
@@ -414,7 +415,7 @@ def main():
                             }
                             if isinstance(details.get('property_details'), dict):
                                 for k, v in details['property_details'].items():
-                                    flat_row[f'property_{k}'] = v
+                                    flat_row[k] = v
                             if isinstance(details.get('ownership_info'), dict):
                                 for k, v in details['ownership_info'].items():
                                     flat_row[f'owner_{k}'] = v
@@ -433,7 +434,7 @@ def main():
                         }
                         if isinstance(details.get('property_details'), dict):
                             for k, v in details['property_details'].items():
-                                flat_row[f'property_{k}'] = v
+                                flat_row[k] = v
                         if isinstance(details.get('ownership_info'), dict):
                             for k, v in details['ownership_info'].items():
                                 flat_row[f'owner_{k}'] = v
@@ -453,6 +454,8 @@ def main():
             'state': 'State',
             'zip_code': 'Zip Code'
         })
+        # Drop the municipality column (it's the empty column after Zip Code)
+        results_df = results_df.drop(results_df.columns[4], axis=1)
         results_df.to_csv(output_file, index=False)
         logger.info(f"Results saved to {output_file}")
         
@@ -461,35 +464,7 @@ def main():
         sys.exit(1)
 
 if __name__ == "__main__":
-    if len(sys.argv) == 3:
-        main()
-    else:
-        # Single-property test
-        scraper = GasStationScraper()
-        try:
-            # Navigate to a property as usual
-            scraper.get_property_details("201 UNION Lane", "Brielle", "NJ", "8730")
-            # Now test the new method:
-            tax_history = scraper.get_tax_list_history()
-            print("Tax List History:")
-            for row in tax_history:
-                print(row)
-            # Save debug HTML if any table was found
-            try:
-                table_elements = scraper.driver.find_elements(
-                    By.XPATH, "//tr[@class='tblshorthead']/following-sibling::tr[1]//table[@id='gvwMod4']"
-                )
-                if table_elements:
-                    with open("tax_list_table_debug.html", "w", encoding="utf-8") as f:
-                        f.write(table_elements[0].get_attribute("outerHTML"))
-                    print("Saved Tax List History table HTML to tax_list_table_debug.html")
-                else:
-                    print("No Tax List History table found to save HTML.")
-            except Exception as e:
-                print(f"Error saving table HTML: {e}")
-            print(f"Number of rows extracted: {len(tax_history)}")
-            # Save to CSV
-            pd.DataFrame(tax_history).to_csv("test_results.csv", index=False)
-            print("Tax List History saved to test_results.csv")
-        finally:
-            scraper.close() 
+    if len(sys.argv) != 3:
+        print("Usage: python scraper.py input.csv output.csv")
+        sys.exit(1)
+    main() 
