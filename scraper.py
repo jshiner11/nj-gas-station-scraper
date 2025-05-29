@@ -126,11 +126,6 @@ class GasStationScraper:
                 # Wait for the page to stabilize
                 time.sleep(2)  # Reduced from 3 to 2 seconds since we're now waiting for active state
                 
-                # Save the page source for debugging
-                with open('after_address_tab.html', 'w', encoding='utf-8') as f:
-                    f.write(self.driver.page_source)
-                logger.info("Saved page source to after_address_tab.html")
-                
                 # Switch back to default content in case we're in an iframe
                 self.driver.switch_to.default_content()
                 
@@ -194,11 +189,6 @@ class GasStationScraper:
                     
                     # Wait for the page to load completely
                     time.sleep(3)  # Give the page a moment to load
-                    
-                    # Save the page source for debugging
-                    with open('after_search.html', 'w', encoding='utf-8') as f:
-                        f.write(self.driver.page_source)
-                    logger.info("Saved page source to after_search.html")
                     
                     # Check page source for content
                     page_source = self.driver.page_source
