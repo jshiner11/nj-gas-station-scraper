@@ -35,21 +35,21 @@ class GasStationScraper:
         self.setup_selenium()
         self.base_url = "https://oprs.co.monmouth.nj.us/oprs/GoogleWithUC/Default.aspx"
         self.street_abbreviations = {
-            'LN': 'Lane',
-            'ST': 'Street',
-            'AVE': 'Avenue',
-            'RD': 'Road',
-            'DR': 'Drive',
-            'BLVD': 'Boulevard',
-            'CT': 'Court',
-            'PL': 'Place',
-            'CIR': 'Circle',
-            'TER': 'Terrace',
-            'PKWY': 'Parkway',
-            'HWY': 'Highway',
-            'SQ': 'Square',
-            'EXPY': 'Expressway',
-            'FWY': 'Freeway'
+            'LN': 'LANE',
+            'ST': 'STREET',
+            'AVE': 'AVENUE',
+            'RD': 'ROAD',
+            'DR': 'DRIVE',
+            'BLVD': 'BOULEVARD',
+            'CT': 'COURT',
+            'PL': 'PLACE',
+            'CIR': 'CIRCLE',
+            'TER': 'TERRACE',
+            'PKWY': 'PARKWAY',
+            'HWY': 'HIGHWAY',
+            'SQ': 'SQUARE',
+            'EXPY': 'EXPRESSWAY',
+            'FWY': 'FREEWAY'
         }
         
     def setup_selenium(self):
@@ -81,153 +81,132 @@ class GasStationScraper:
     def get_property_details(self, address: str, city: str, state: str, zip_code: str) -> Dict[str, Any]:
         """
         Scrape property details for a given address from Monmouth County OPRS.
-        Returns a dictionary containing all scraped information.
+        Tries both abbreviation and full street type variants if needed.
+        """
+        # Try as given (no formatting)
+        details = self._search_property(address, city, state, zip_code)
+        if details:
+            return details
+
+        # Prepare abbreviation/full form mappings
+        words = address.split()
+        last = words[-1].upper()
+        # Try full form if abbreviation
+        if last in self.street_abbreviations:
+            alt = self.street_abbreviations[last]
+            alt_address = ' '.join(words[:-1] + [alt])
+            logger.info(f"Retrying with full form: {alt_address}")
+            details = self._search_property(alt_address, city, state, zip_code)
+            if details:
+                return details
+        # Try abbreviation if full form
+        rev_map = {v.upper(): k for k, v in self.street_abbreviations.items()}
+        if last in rev_map:
+            alt = rev_map[last]
+            alt_address = ' '.join(words[:-1] + [alt])
+            logger.info(f"Retrying with abbreviation: {alt_address}")
+            details = self._search_property(alt_address, city, state, zip_code)
+            if details:
+                return details
+
+        # If all fail
+        return None
+
+    def _search_property(self, address, city, state, zip_code):
+        """
+        The main property search logic. Returns details dict if found, else None.
         """
         try:
-            # Format the address first, before any processing
-            formatted_address = self._format_street_name(address)  # Convert LN to LANE etc.
-            logger.info(f"Formatted address: {formatted_address}")
-            
-            # Create the full search address for logging
-            search_address = f"{formatted_address}, {city}, {state} {zip_code}"
-            logger.info(f"Searching for property: {search_address}")
-            
-            # Navigate to the search page
+            # Do NOT format the address here; use as-is for retry logic
+            logger.info(f"Searching for property: {address}, {city}, {state} {zip_code}")
             self.driver.get(self.base_url)
             logger.info("Navigated to base URL")
-            
-            # Wait for the page to load and find the tabbernav
             try:
                 tabbernav = WebDriverWait(self.driver, 10).until(
                     EC.presence_of_element_located((By.CLASS_NAME, "tabbernav"))
                 )
                 logger.info("Found tabbernav element")
-                
-                # Print the tabbernav HTML for debugging
                 logger.info(f"Tabbernav HTML: {tabbernav.get_attribute('outerHTML')}")
             except TimeoutException:
                 logger.error("Could not find tabbernav element")
-                raise
-            
-            # Click the "By Address" tab
+                return None
             try:
                 address_tab = WebDriverWait(self.driver, 10).until(
                     EC.element_to_be_clickable((By.XPATH, "//a[contains(text(), 'By Address')]"))
                 )
                 address_tab.click()
                 logger.info("Clicked By Address tab")
-                
-                # Wait for the tab to become active
                 WebDriverWait(self.driver, 10).until(
                     EC.presence_of_element_located((By.XPATH, "//li[contains(@class, 'tabberactive')]//a[contains(text(), 'By Address')]"))
                 )
                 logger.info("By Address tab is now active")
-                
-                # Wait for the page to stabilize
-                time.sleep(2)  # Reduced from 3 to 2 seconds since we're now waiting for active state
-                
-                # Switch back to default content in case we're in an iframe
+                time.sleep(2)
                 self.driver.switch_to.default_content()
-                
-                # Wait for the By Address tab content to be visible (not tabbertabhide)
                 def tab1_visible(driver):
                     tab1 = driver.find_element(By.ID, "tab1")
                     return tab1.is_displayed() and "tabbertabhide" not in tab1.get_attribute("class")
                 WebDriverWait(self.driver, 10).until(tab1_visible)
                 logger.info("By Address tab content is visible")
-                
-                # Wait for the township dropdown to be visible and clickable (By Address tab)
                 township_dropdown = WebDriverWait(self.driver, 10).until(
                     EC.element_to_be_clickable((By.ID, "ctl00_ContentPlaceHolder1_ddlMunicp1"))
                 )
                 logger.info("Township dropdown found and clickable (By Address tab)")
-                
-                # Wait for the address input to be available
                 address_input = WebDriverWait(self.driver, 10).until(
                     EC.presence_of_element_located((By.ID, "ctl00_ContentPlaceHolder1_txtAddress"))
                 )
                 logger.info("Address input found (By Address tab)")
-                
-                # Enter the address (only the street address)
                 address_input.clear()
-                address_input.send_keys(formatted_address)  # Use the pre-formatted address
-                logger.info(f"Entered street address: {formatted_address}")
-                
-                # Select the township (city)
+                address_input.send_keys(address)
+                logger.info(f"Entered street address: {address}")
                 township_select = Select(township_dropdown)
-                
-                # Print all available options for debugging
                 logger.info("Available township options:")
                 for option in township_select.options:
                     logger.info(f"  - {option.text}")
-                
-                # Convert city name to proper case (e.g., "BRIELLE" -> "Brielle")
                 proper_case_city = city.title()
                 logger.info(f"Attempting to select township: {proper_case_city}")
-                
-                # Try to select the township
                 try:
                     township_select.select_by_visible_text(proper_case_city)
                 except Exception as e:
                     logger.error(f"Could not select township '{proper_case_city}'. Available options were printed above.")
-                    raise
-                
-                # Click search button (By Address tab)
+                    return None
                 search_button = self.driver.find_element(By.ID, "ctl00_ContentPlaceHolder1_btnSearch1")
                 search_button.click()
                 logger.info("Clicked search button (By Address tab)")
-                
-                # Wait for URL to change to the results page
                 try:
-                    # Log the current URL before waiting
                     logger.info(f"Current URL before waiting: {self.driver.current_url}")
-                    
                     WebDriverWait(self.driver, 20).until(
                         lambda driver: "PropertyDtls.aspx" in driver.current_url
                     )
                     logger.info(f"Redirected to property details page: {self.driver.current_url}")
-                    
-                    # Wait for the page to load completely
-                    time.sleep(3)  # Give the page a moment to load
-                    
-                    # Check page source for content
+                    time.sleep(3)
                     page_source = self.driver.page_source
                     if "No matching property record found" in page_source:
                         logger.warning("No results found for the search")
                         return None
                     elif "ctl00_ContentPlaceHolder1_PrimPropInfo_gvDtls" in page_source:
                         logger.info("Found property details table by ID in page source")
-                        return self._extract_property_details()
+                        property_details = self._extract_property_details()
+                        return {
+                            'address': address,
+                            'city': city,
+                            'state': state,
+                            'zip_code': zip_code,
+                            'property_details': property_details,
+                        }
                     else:
                         logger.error("Could not determine if results were found")
                         return None
-                    
                 except TimeoutException:
                     logger.error("Timeout waiting for property details page")
-                    raise
-                
+                    return None
             except TimeoutException as e:
                 logger.error(f"Timeout while waiting for elements after clicking By Address tab: {str(e)}")
-                raise
+                return None
             except Exception as e:
                 logger.error(f"Error during tab navigation: {str(e)}")
-                raise
-            
-            # Extract property details
-            property_details = self._extract_property_details()
-            
-            return {
-                'address': address,
-                'city': city,
-                'state': state,
-                'zip_code': zip_code,
-                'property_details': property_details,
-                'ownership_info': self._extract_ownership_info(),
-                'metadata': self._extract_metadata()
-            }
-            
+                return None
         except Exception as e:
-            logger.error(f"Error scraping property {search_address}: {str(e)}")
+            logger.error(f"Error scraping property {address}, {city}, {state} {zip_code}: {str(e)}")
             return None
             
     def _extract_property_details(self) -> Dict[str, Any]:
