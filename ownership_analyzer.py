@@ -24,37 +24,51 @@ def normalize_owner_name_and_address(owner_info):
     name = re.sub(r'\bLIMITED\b', 'LTD', name)
     return name, address
 
-def analyze_ownership(csv_file):
-    """Analyze property ownership history from CSV file."""
-    # Read the CSV file
-    df = pd.read_csv(csv_file)
-    # Get the current owner and mailing address (from the most recent year)
-    current_owner, mailing_address = normalize_owner_name_and_address(df.iloc[0]['Owner Info'])
-    current_year = df.iloc[0]['Year']
-    # Find the ownership start year
-    ownership_start_year = None
-    for _, row in df.iterrows():
-        owner, _ = normalize_owner_name_and_address(row['Owner Info'])
-        if owner != current_owner:
-            break
-        ownership_start_year = row['Year']
-    # Calculate years owned
-    years_owned = current_year - ownership_start_year + 1
-    return {
-        "owner": current_owner,
-        "mailing_address": mailing_address,
-        "ownership_start_year": ownership_start_year,
-        "current_year": current_year,
-        "years_owned": years_owned
-    }
+def analyze_ownership(filename):
+    df = pd.read_csv(filename)
+    required_columns = ['Address', 'City', 'State', 'Zip Code', 'Year', 'Owner Info']
+    for col in required_columns:
+        if col not in df.columns:
+            raise ValueError(f"Missing required column: {col}")
+
+    # Group by property
+    group_cols = ['Address', 'City', 'State', 'Zip Code']
+    results = []
+    for group_keys, group in df.groupby(group_cols):
+        group = group.sort_values('Year', ascending=False)
+        current_owner, mailing_address = normalize_owner_name_and_address(group.iloc[0]['Owner Info'])
+        current_year = int(group.iloc[0]['Year'])
+        # Find the earliest year the current owner appears
+        years_owned = 1
+        start_year = current_year
+        for _, row in group.iterrows():
+            owner, _ = normalize_owner_name_and_address(row['Owner Info'])
+            year = int(row['Year'])
+            if owner == current_owner:
+                start_year = year
+                years_owned = current_year - start_year + 1
+            else:
+                break
+        results.append({
+            'Address': group_keys[0],
+            'City': group_keys[1],
+            'State': group_keys[2],
+            'Zip Code': group_keys[3],
+            'Current Owner': current_owner,
+            'Mailing Address': mailing_address,
+            'Ownership Start Year': start_year,
+            'Current Year': current_year,
+            'Years Owned': years_owned
+        })
+    return results
 
 if __name__ == "__main__":
-    # Analyze ownership for each property
     results = analyze_ownership('test_results.csv')
-    # Print results
-    print("\nOwnership Analysis:")
-    print(f"Current Owner: {results['owner']}")
-    print(f"Mailing Address: {results['mailing_address']}")
-    print(f"Ownership Start Year: {results['ownership_start_year']}")
-    print(f"Current Year: {results['current_year']}")
-    print(f"Years Owned: {results['years_owned']}") 
+    print("Ownership Analysis:")
+    for r in results:
+        print(f"\nProperty: {r['Address']}, {r['City']}, {r['State']} {r['Zip Code']}")
+        print(f"Current Owner: {r['Current Owner']}")
+        print(f"Mailing Address: {r['Mailing Address']}")
+        print(f"Ownership Start Year: {r['Ownership Start Year']}")
+        print(f"Current Year: {r['Current Year']}")
+        print(f"Years Owned: {r['Years Owned']}") 

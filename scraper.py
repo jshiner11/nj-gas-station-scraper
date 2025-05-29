@@ -59,8 +59,9 @@ class GasStationScraper:
         chrome_options.add_argument('--no-sandbox')
         chrome_options.add_argument('--disable-dev-shm-usage')
         
+        # Use webdriver_manager to automatically manage ChromeDriver
         self.driver = webdriver.Chrome(
-            service=Service('./chromedriver-mac-arm64/chromedriver'),
+            service=Service(ChromeDriverManager().install()),
             options=chrome_options
         )
         
@@ -452,7 +453,7 @@ def main():
                                 for k, v in details['metadata'].items():
                                     flat_row[f'meta_{k}'] = v
                             for k, v in tax_row.items():
-                                flat_row[f'tax_{k}'] = v
+                                flat_row[k] = v
                             results.append(flat_row)
                     else:
                         flat_row = {
@@ -477,6 +478,12 @@ def main():
         
         # Save results to CSV
         results_df = pd.DataFrame(results)
+        results_df = results_df.rename(columns={
+            'address': 'Address',
+            'city': 'City',
+            'state': 'State',
+            'zip_code': 'Zip Code'
+        })
         results_df.to_csv(output_file, index=False)
         logger.info(f"Results saved to {output_file}")
         
