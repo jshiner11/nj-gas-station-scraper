@@ -139,4 +139,4 @@ def analyze_ownership(filename):
     return results
 
 if __name__ == "__main__":
-    results = analyze_ownership('test_results.csv') 
+    results = analyze_ownership('addresses_results.csv') 
