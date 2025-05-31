@@ -35,22 +35,22 @@ class GasStationScraper:
         self.setup_selenium()
         self.base_url = "https://oprs.co.monmouth.nj.us/oprs/GoogleWithUC/Default.aspx"
         self.street_abbreviations = {
-            'LN': 'LANE',
-            'ST': 'STREET',
-            'AVE': 'AVENUE',
-            'RD': 'ROAD',
-            'RT': 'ROUTE',
-            'DR': 'DRIVE',
-            'BLVD': 'BOULEVARD',
-            'CT': 'COURT',
-            'PL': 'PLACE',
-            'CIR': 'CIRCLE',
-            'TER': 'TERRACE',
-            'PKWY': 'PARKWAY',
-            'HWY': 'HIGHWAY',
-            'SQ': 'SQUARE',
-            'EXPY': 'EXPRESSWAY',
-            'FWY': 'FREEWAY'
+            'LN': ['LANE'],
+            'ST': ['STREET'],
+            'AVE': ['AVENUE'],
+            'RD': ['ROAD'],
+            'RT': ['ROUTE', 'HWY', 'HIGHWAY', 'US HIGHWAY', 'US HWY'],
+            'HWY': ['HIGHWAY', 'ROUTE', 'US HIGHWAY', 'US HWY'],
+            'DR': ['DRIVE'],
+            'BLVD': ['BOULEVARD'],
+            'CT': ['COURT'],
+            'PL': ['PLACE'],
+            'CIR': ['CIRCLE'],
+            'TER': ['TERRACE'],
+            'PKWY': ['PARKWAY'],
+            'SQ': ['SQUARE'],
+            'EXPY': ['EXPRESSWAY'],
+            'FWY': ['FREEWAY']
         }
         
     def setup_selenium(self):
@@ -82,34 +82,53 @@ class GasStationScraper:
     def get_property_details(self, address: str, city: str, state: str, zip_code: str) -> Dict[str, Any]:
         """
         Scrape property details for a given address from Monmouth County OPRS.
-        Tries both abbreviation and full street type variants if needed.
+        Tries all abbreviation and full street type variants if needed.
         """
         # Try as given (no formatting)
         details = self._search_property(address, city, state, zip_code)
         if details:
             return details
 
-        # Prepare abbreviation/full form mappings
+        abbr_map = self.street_abbreviations
+        # Build reverse map: full form -> list of abbreviations
+        rev_map = {}
+        for abbr, alts in abbr_map.items():
+            for alt in alts:
+                alt_upper = alt.upper()
+                if alt_upper not in rev_map:
+                    rev_map[alt_upper] = []
+                rev_map[alt_upper].append(abbr)
         words = address.split()
-        last = words[-1].upper()
-        # Try full form if abbreviation
-        if last in self.street_abbreviations:
-            alt = self.street_abbreviations[last]
-            alt_address = ' '.join(words[:-1] + [alt])
-            logger.info(f"Retrying with full form: {alt_address}")
-            details = self._search_property(alt_address, city, state, zip_code)
-            if details:
-                return details
-        # Try abbreviation if full form
-        rev_map = {v.upper(): k for k, v in self.street_abbreviations.items()}
-        if last in rev_map:
-            alt = rev_map[last]
-            alt_address = ' '.join(words[:-1] + [alt])
-            logger.info(f"Retrying with abbreviation: {alt_address}")
-            details = self._search_property(alt_address, city, state, zip_code)
-            if details:
-                return details
-
+        tried = set()
+        tried.add(address.upper())
+        # Try all abbr->full alternatives
+        for i, word in enumerate(words):
+            word_upper = word.upper()
+            if word_upper in abbr_map:
+                for alt in abbr_map[word_upper]:
+                    new_words = words.copy()
+                    new_words[i] = alt
+                    alt_address = ' '.join(new_words)
+                    if alt_address.upper() not in tried:
+                        logger.info(f"Retrying with full form: {alt_address}")
+                        details = self._search_property(alt_address, city, state, zip_code)
+                        if details:
+                            return details
+                        tried.add(alt_address.upper())
+        # Try all full->abbr alternatives
+        for i, word in enumerate(words):
+            word_upper = word.upper()
+            if word_upper in rev_map:
+                for abbr in rev_map[word_upper]:
+                    new_words = words.copy()
+                    new_words[i] = abbr
+                    alt_address = ' '.join(new_words)
+                    if alt_address.upper() not in tried:
+                        logger.info(f"Retrying with abbreviation: {alt_address}")
+                        details = self._search_property(alt_address, city, state, zip_code)
+                        if details:
+                            return details
+                        tried.add(alt_address.upper())
         # If all fail
         return None
 
@@ -375,6 +394,18 @@ class GasStationScraper:
             
         return tax_list
 
+def save_results(results, output_file):
+    results_df = pd.DataFrame(results)
+    results_df = results_df.rename(columns={
+        'address': 'Address',
+        'city': 'City',
+        'state': 'State',
+        'zip_code': 'Zip Code'
+    })
+    # Ensure ZIP codes are treated as strings with leading zeros
+    results_df['Zip Code'] = results_df['Zip Code'].astype(str).str.zfill(5)
+    results_df.to_csv(output_file, index=False)
+
 def main():
     if len(sys.argv) != 3:
         print("Usage: python scraper.py input.csv output.csv")
@@ -459,16 +490,7 @@ def main():
             time.sleep(2)
         
         # Save results to CSV
-        results_df = pd.DataFrame(results)
-        results_df = results_df.rename(columns={
-            'address': 'Address',
-            'city': 'City',
-            'state': 'State',
-            'zip_code': 'Zip Code'
-        })
-        # Drop the municipality column (it's the empty column after Zip Code)
-        results_df = results_df.drop(results_df.columns[4], axis=1)
-        results_df.to_csv(output_file, index=False)
+        save_results(results, output_file)
         logger.info(f"Results saved to {output_file}")
         
     except Exception as e:

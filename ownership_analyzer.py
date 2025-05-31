@@ -27,14 +27,14 @@ def normalize_owner_name_and_address(owner_info):
     return name, address
 
 def analyze_ownership(filename):
-    df = pd.read_csv(filename)
+    df = pd.read_csv(filename, dtype={'Zip Code': str})
     required_columns = ['Address', 'City', 'State', 'Zip Code', 'Year', 'Owner Info', 'Assessed']
     for col in required_columns:
         if col not in df.columns:
             raise ValueError(f"Missing required column: {col}")
 
     # Read the original input file to get Site Names and preserve order
-    input_df = pd.read_csv('addresses.csv')
+    input_df = pd.read_csv('addresses.csv', dtype={'zip_code': str})
     site_names = dict(zip(input_df['address'].str.upper(), input_df['Site Name']))
 
     # Group the results by property for fast lookup
@@ -66,20 +66,19 @@ def analyze_ownership(filename):
                     'State': state,
                     'Zip Code': zip_code,
                     'Owner Info': '',
-                    'Mailing Address': '',
                     'Ownership Start Year': '',
                     'Current Year': '',
                     'Years Owned': '',
                     'Assessed': ''
                 })
                 continue
-            current_owner, mailing_address = normalize_owner_name_and_address(first_row['Owner Info'])
+            current_owner = first_row['Owner Info']  # Use as-is
             current_year = int(first_row['Year'])
             current_assessed = first_row['Assessed']
             years_owned = 1
             start_year = current_year
             for _, row in group.iterrows():
-                owner, _ = normalize_owner_name_and_address(row['Owner Info'])
+                owner = row['Owner Info']  # Use as-is
                 year = row['Year']
                 if not isinstance(year, str) and pd.isna(year):
                     continue
@@ -96,7 +95,6 @@ def analyze_ownership(filename):
                 'State': state,
                 'Zip Code': zip_code,
                 'Owner Info': current_owner,
-                'Mailing Address': mailing_address,
                 'Ownership Start Year': start_year,
                 'Current Year': current_year,
                 'Years Owned': years_owned,
@@ -111,7 +109,6 @@ def analyze_ownership(filename):
                 'State': state,
                 'Zip Code': zip_code,
                 'Owner Info': '',
-                'Mailing Address': '',
                 'Ownership Start Year': '',
                 'Current Year': '',
                 'Years Owned': '',
@@ -130,7 +127,6 @@ def analyze_ownership(filename):
         print(f"\nSite Name: {r['Site Name']}")
         print(f"Property: {r['Address']}, {r['City']}, {r['State']} {r['Zip Code']}")
         print(f"Owner Info: {r['Owner Info']}")
-        print(f"Mailing Address: {r['Mailing Address']}")
         print(f"Ownership Start Year: {r['Ownership Start Year']}")
         print(f"Current Year: {r['Current Year']}")
         print(f"Years Owned: {r['Years Owned']}")
@@ -139,4 +135,4 @@ def analyze_ownership(filename):
     return results
 
 if __name__ == "__main__":
-    results = analyze_ownership('addresses_results.csv') 
+    analyze_ownership('addresses_results.csv') 
